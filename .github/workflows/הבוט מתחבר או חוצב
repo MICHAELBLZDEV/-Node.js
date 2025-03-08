@@ -1,0 +1,80 @@
+const mineflayer = require('mineflayer');
+const Vec3 = require('vec3');
+const { pathfinder, Movements, goals: { GoalBlock } } = require('mineflayer-pathfinder');
+
+function createBot() {
+  const bot = mineflayer.createBot({
+    host: 'FR_122.aternos.me',
+    port: 47372,
+    username: 'GILADASHOMAR',
+    auth: 'offline'
+  });
+
+  bot.loadPlugin(pathfinder);
+
+  bot.on('spawn', () => {
+    console.log('הבוט מחובר לשרת!');
+    const defaultMove = new Movements(bot);
+    bot.pathfinder.setMovements(defaultMove);
+    bot.chat("אני מוכן! כתבו 'אסוף' כדי לאסוף חומרים.");
+  });
+
+  bot.on('chat', (username, message) => {
+    if (username === bot.username) return;
+
+    if (message === 'אסוף') {
+      bot.chat(`${username}, אני הולך לאסוף חומרים!`);
+      gatherMaterials();
+    }
+  });
+
+
+  async function gatherMaterials() {
+    const targetMaterial = 'oak_log';
+    const targetCount = 5;
+    const currentCount = bot.inventory.count(bot.registry.itemsByName[targetMaterial].id);
+
+    if (currentCount >= targetCount) {
+      bot.chat(`יש לי מספיק ${targetMaterial} (${currentCount}/${targetCount}).`);
+      return;
+    }
+
+    bot.chat(`אוסף ${targetMaterial}. כרגע: ${currentCount}/${targetCount}`);
+
+    const block = bot.findBlock({
+      matching: (block) => block.name === targetMaterial,
+      maxDistance: 64
+    });
+
+    if (!block) {
+      bot.chat(`לא מצאתי ${targetMaterial} בסביבה.`);
+      return;
+    }
+
+    bot.chat(`מצאתי ${targetMaterial}. מתקדם לשם...`);
+    bot.pathfinder.setGoal(new GoalBlock(block.position.x, block.position.y, block.position.z));
+
+    bot.once('goal_reached', async () => {
+      bot.chat("הגעתי לבלוק, כורה...");
+      try {
+        await bot.dig(block);
+        bot.chat(`אספתי ${targetMaterial}`);
+        setTimeout(gatherMaterials, 1000);
+      } catch (err) {
+        bot.chat("שגיאה בכרייה, מנסה שוב...");
+        setTimeout(gatherMaterials, 2000);
+      }
+    });
+  }
+
+  bot.on('error', err => console.log('שגיאה:', err));
+
+  bot.on('end', () => {
+    console.log('הבוט התנתק, מתחבר מחדש בעוד 5 שניות...');
+    setTimeout(createBot, 5000);
+  });
+
+  return bot;
+}
+
+createBot();
